@@ -1,3 +1,6 @@
+const InfoController = require("./info-controller");
+const BookingController = require("./booking-controller");
 module.exports = {
-    InfoController: require('./info-controller'),
+  InfoController,
+  BookingController,
 };

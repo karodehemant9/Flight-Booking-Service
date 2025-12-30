@@ -4,6 +4,8 @@ const db = require("../models");
 const { ServerConfig } = require("../config");
 const AppError = require("../utils/errors/app-error");
 const { StatusCodes } = require("http-status-codes");
+const { Enums } = require("../utils/common");
+const { BOOKED, INITIATED, PENDING, CANCELLED } = Enums.BOOKING_STATUS;
 
 const bookingRepository = new BookingRepository();
 
@@ -44,6 +46,52 @@ async function createBooking(data) {
   }
 }
 
+async function makePayment(data) {
+  // Implementation for making payment
+  const transaction = await db.sequelize.transaction();
+  try {
+    const bookingDetails = await bookingRepository.get(
+      data.bookingId,
+      transaction
+    );
+
+    if (bookingDetails.status === "CANCELLED") {
+      throw new AppError("Booking Cancelled", StatusCodes.BAD_REQUEST);
+    }
+    const bookingTime = new Date(bookingDetails.createdAt);
+    const currentTime = new Date();
+    const timeDiff = currentTime - bookingTime; // in miliseconds
+    // 5 minutes = 300000 ms
+    if (timeDiff > 300000) {
+      await bookingRepository.update(
+        data.bookingId,
+        { status: "CANCELLED" },
+        transaction
+      );
+      throw new AppError("Booking Expired", StatusCodes.BAD_REQUEST);
+    }
+    if (bookingDetails.totalCost !== data.amount) {
+      throw new AppError("Amount mismatch", StatusCodes.BAD_REQUEST);
+    }
+    // Further payment processing logic goes here
+    if (bookingDetails.userId !== data.userId) {
+      throw new AppError("User ID mismatch", StatusCodes.BAD_REQUEST);
+    }
+    // Assuming payment is successful
+    const response = await bookingRepository.update(
+      data.bookingId,
+      { status: "BOOKED" },
+      transaction
+    );
+    await transaction.commit();
+    return response;
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
+}
+
 module.exports = {
   createBooking,
+  makePayment,
 };
